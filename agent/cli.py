@@ -78,7 +78,7 @@ def run(
         console.print(f"[red]Task '{task_id}' not found.[/red]")
         raise typer.Exit(code=1)
 
-    console.print(f"\n[bold]Provider:[/bold]  {config.default_provider.value}")
+    console.print(f"\n[bold]Provider:[/bold]  {config.active_provider.value}")
     console.print(f"[bold]Model:[/bold]     {config.active_model()}")
     console.print(f"[bold]Task:[/bold]      {task['id']} — {task['title']}")
     console.print(f"[bold]Repo:[/bold]      {task.get('repo', 'N/A')}\n")

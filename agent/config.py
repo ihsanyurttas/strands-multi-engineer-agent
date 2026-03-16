@@ -119,13 +119,24 @@ class AgentConfig(BaseSettings):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+    @property
+    def active_provider(self) -> Provider:
+        """
+        The provider selected for this run.
+
+        `default_provider` is the env-var name used for configuration;
+        `active_provider` is the runtime accessor used by the factory and
+        the workflow so callsites read as intent, not config field names.
+        """
+        return self.default_provider
+
     def active_model(self) -> str:
         """Return the model ID for the currently selected provider."""
         return {
             Provider.anthropic: self.anthropic_model,
             Provider.openai: self.openai_model,
             Provider.ollama: self.ollama_model,
-        }[self.default_provider]
+        }[self.active_provider]
 
     def doctor_report(self) -> dict[str, str]:
         """Return a human-readable health summary (no secret values)."""

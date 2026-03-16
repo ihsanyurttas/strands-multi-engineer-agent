@@ -83,7 +83,7 @@ def run_workflow(
     ctx = WorkflowContext(
         issue=issue,
         repo_path=repo_path,
-        provider=config.default_provider.value,
+        provider=config.active_provider.value,
         model=config.active_model(),
     )
 

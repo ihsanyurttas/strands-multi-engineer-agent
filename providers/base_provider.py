@@ -1,62 +1,65 @@
 """
 providers/base_provider.py — provider abstraction and factory.
 
-Each provider returns a Strands-compatible model object.
-The factory function `get_strands_model` is the single entry point used
-by the workflow — it reads the active provider from config and returns the
-appropriate model without the caller needing to know which provider is active.
+Each concrete builder constructs a Strands Model object for one LLM provider.
+The factory function `get_strands_model` is the single entry point used by
+the workflow — callers never import a provider class directly.
 
 Adding a new provider:
-  1. Add a new entry to the Provider enum in agent/config.py
-  2. Add a branch in get_strands_model() below
-  3. Add any required env vars to .env.example
+  1. Add a value to the Provider enum in agent/config.py
+  2. Subclass BaseProviderBuilder and implement build()
+  3. Register it in _PROVIDER_MAP
+  4. Add required env vars to .env.example
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING
 
 from agent.config import AgentConfig, Provider
 
+if TYPE_CHECKING:
+    # strands.models.Model is the shared base for all Strands model objects.
+    # Imported under TYPE_CHECKING so this module remains importable even when
+    # strands-agents is not installed (e.g. during unit tests or lint runs).
+    from strands.models import Model
+
+
+class ProviderImportError(RuntimeError):
+    """Raised when a provider's Strands integration cannot be imported."""
+
 
 # ---------------------------------------------------------------------------
-# Abstract base — all provider builders must implement this interface
+# Abstract base
 # ---------------------------------------------------------------------------
 
 class BaseProviderBuilder(ABC):
-    """
-    Minimal interface for constructing a Strands-compatible model object.
-
-    Implementing classes are not used directly — `get_strands_model` is the
-    public API. This base class exists for type-safety and documentation.
-    """
+    """Constructs a configured Strands Model object for one provider."""
 
     def __init__(self, config: AgentConfig) -> None:
         self.config = config
 
     @abstractmethod
-    def build(self) -> Any:
-        """Return a configured Strands model instance."""
-        ...
+    def build(self) -> "Model":
+        """Return a configured Strands Model instance."""
 
 
 # ---------------------------------------------------------------------------
-# Anthropic provider
+# Concrete builders
 # ---------------------------------------------------------------------------
 
 class AnthropicProvider(BaseProviderBuilder):
-    """
-    Uses strands.models.BedrockModel or the native Anthropic model depending
-    on what strands-agents exposes.
+    """Builds a Strands AnthropicModel using the Anthropic API."""
 
-    For Phase 1 this wraps strands_agents with the Anthropic API key.
-    """
-
-    def build(self) -> Any:
-        # Strands ships its own Anthropic integration.
-        # Import here so the module is importable without strands installed.
-        from strands.models.anthropic import AnthropicModel
+    def build(self) -> "Model":
+        try:
+            from strands.models.anthropic import AnthropicModel
+        except ImportError as exc:
+            raise ProviderImportError(
+                "Could not import strands.models.anthropic. "
+                "Ensure strands-agents is installed: pip install strands-agents"
+            ) from exc
 
         return AnthropicModel(
             client_args={"api_key": self.config.anthropic_api_key},
@@ -64,15 +67,17 @@ class AnthropicProvider(BaseProviderBuilder):
         )
 
 
-# ---------------------------------------------------------------------------
-# OpenAI provider
-# ---------------------------------------------------------------------------
-
 class OpenAIProvider(BaseProviderBuilder):
-    """Wraps the Strands OpenAI model with credentials from env vars."""
+    """Builds a Strands OpenAIModel using the OpenAI API."""
 
-    def build(self) -> Any:
-        from strands.models.openai import OpenAIModel
+    def build(self) -> "Model":
+        try:
+            from strands.models.openai import OpenAIModel
+        except ImportError as exc:
+            raise ProviderImportError(
+                "Could not import strands.models.openai. "
+                "Ensure strands-agents is installed: pip install strands-agents"
+            ) from exc
 
         return OpenAIModel(
             client_args={"api_key": self.config.openai_api_key},
@@ -80,22 +85,23 @@ class OpenAIProvider(BaseProviderBuilder):
         )
 
 
-# ---------------------------------------------------------------------------
-# Ollama provider  (container-first — uses OLLAMA_BASE_URL)
-# ---------------------------------------------------------------------------
-
 class OllamaProvider(BaseProviderBuilder):
     """
-    Points Strands at a running Ollama instance.
+    Builds a Strands OllamaModel pointed at OLLAMA_BASE_URL.
 
-    The base URL defaults to http://ollama:11434 (Docker Compose service name).
-    For native local execution, set OLLAMA_BASE_URL=http://localhost:11434.
-
-    No API key is required for Ollama.
+    No API key is required. The default URL (http://ollama:11434) matches the
+    Docker Compose service name. Override with OLLAMA_BASE_URL=http://localhost:11434
+    for a native Ollama install.
     """
 
-    def build(self) -> Any:
-        from strands.models.ollama import OllamaModel
+    def build(self) -> "Model":
+        try:
+            from strands.models.ollama import OllamaModel
+        except ImportError as exc:
+            raise ProviderImportError(
+                "Could not import strands.models.ollama. "
+                "Ensure strands-agents is installed: pip install strands-agents"
+            ) from exc
 
         return OllamaModel(
             host=self.config.ollama_base_url,
@@ -104,7 +110,7 @@ class OllamaProvider(BaseProviderBuilder):
 
 
 # ---------------------------------------------------------------------------
-# Factory — the only function the workflow needs to call
+# Factory
 # ---------------------------------------------------------------------------
 
 _PROVIDER_MAP: dict[Provider, type[BaseProviderBuilder]] = {
@@ -114,18 +120,22 @@ _PROVIDER_MAP: dict[Provider, type[BaseProviderBuilder]] = {
 }
 
 
-def get_strands_model(config: AgentConfig) -> Any:
+def get_strands_model(config: AgentConfig) -> "Model":
     """
-    Return a configured Strands model object for the active provider.
+    Return a configured Strands Model for the active provider.
 
-    This is the single entry point used by workflow.py.
-    Raises ValueError for unknown providers (should never happen after
-    pydantic validation, but kept as a safety net).
+    Reads config.active_provider and delegates to the registered builder.
+    Raises ProviderImportError if the Strands integration cannot be imported.
+    Raises ValueError if no builder is registered for the provider (should not
+    occur after Pydantic validation, but kept as an explicit safety net).
     """
-    builder_cls = _PROVIDER_MAP.get(config.default_provider)
+    provider = config.active_provider
+    builder_cls = _PROVIDER_MAP.get(provider)
+
     if builder_cls is None:
         raise ValueError(
-            f"No provider builder registered for '{config.default_provider}'. "
-            f"Known providers: {list(_PROVIDER_MAP)}"
+            f"No builder registered for provider '{provider}'. "
+            f"Registered providers: {[p.value for p in _PROVIDER_MAP]}"
         )
+
     return builder_cls(config).build()
