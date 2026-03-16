@@ -68,7 +68,7 @@ def run_workflow(issue: str, repo_path: str, config: AgentConfig) -> WorkflowRes
         from strands import Agent
         from tools.repo_reader import list_files, read_file
         from tools.search_tools import search_in_repo
-        from tools.patch_writer import write_patch
+        from tools.patch_writer import write_file
     except ImportError as exc:
         raise RuntimeError(
             "strands-agents is not installed. Run: pip install strands-agents"
@@ -92,7 +92,7 @@ def run_workflow(issue: str, repo_path: str, config: AgentConfig) -> WorkflowRes
     agent: Agent = Agent(
         model=model,
         system_prompt=SYSTEM_PROMPT,
-        tools=[read_file, list_files, search_in_repo, write_patch],
+        tools=[read_file, list_files, search_in_repo, write_file],
         max_parallel_tool_uses=1,  # sequential — ensures deterministic output for comparison
         max_iterations=config.max_iterations,
     )
