@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "strands-multi-engineer-agent"
@@ -21,6 +21,7 @@ dependencies = [
     "rich>=13.7.0",
     "openai>=1.35.0",
     "anthropic>=0.28.0",
+    "ollama>=0.3.0",
 ]
 
 [project.optional-dependencies]
@@ -35,8 +36,12 @@ dev = [
 [project.scripts]
 agent = "agent.cli:app"
 
-[tool.hatch.build.targets.wheel]
-packages = ["agent", "providers", "tools", "tasks", "eval"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["agent*", "providers*", "tools*", "tasks*", "eval*"]
+
+[tool.setuptools.package-data]
+tasks = ["*.yaml"]
 
 [tool.ruff]
 line-length = 100

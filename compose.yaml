@@ -5,11 +5,11 @@ services:
   # --------------------------------------------------------------------------
   # agent — the Python CLI application
   #
-  # Intended usage: docker compose run --rm agent agent <command>
+  # Intended usage: docker compose run --rm agent <command>
   # Examples:
-  #   docker compose run --rm agent agent doctor
-  #   docker compose run --rm agent agent list-tasks
-  #   docker compose run --rm agent agent run --provider ollama
+  #   docker compose run --rm agent doctor
+  #   docker compose run --rm agent list-tasks
+  #   docker compose run --rm agent run --provider ollama
   #
   # depends_on is intentionally omitted: the agent supports multiple providers
   # and should not be forced to wait for Ollama when using Anthropic or OpenAI.
@@ -51,7 +51,7 @@ services:
     volumes:
       - ollama-models:/root/.ollama
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:11434/api/tags"]
+      test: ["CMD", "ollama", "list"]
       interval: 10s
       timeout: 5s
       retries: 10

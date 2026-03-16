@@ -5,6 +5,11 @@ Commands:
   agent run          Execute the engineering workflow
   agent list-tasks   List available tasks from tasks/issues.yaml
   agent doctor       Validate environment and configuration
+
+Task sources for `agent run` (mutually exclusive):
+  --task <id>        Built-in task from tasks/issues.yaml
+  --repo + --issue   Ad-hoc task defined inline
+  --task-file <path> Task loaded from a YAML file
 """
 
 from __future__ import annotations
@@ -36,7 +41,27 @@ def run(
         None,
         "--task",
         "-t",
-        help="Task ID from tasks/issues.yaml. If omitted, uses the first task.",
+        help="Task ID from tasks/issues.yaml.",
+    ),
+    repo: Optional[str] = typer.Option(
+        None,
+        "--repo",
+        help="Repo path for an ad-hoc task (requires --issue).",
+    ),
+    issue: Optional[str] = typer.Option(
+        None,
+        "--issue",
+        help="Issue description for an ad-hoc task (requires --repo).",
+    ),
+    difficulty: str = typer.Option(
+        "medium",
+        "--difficulty",
+        help="Difficulty label for ad-hoc tasks: easy | medium | hard.",
+    ),
+    task_file: Optional[Path] = typer.Option(
+        None,
+        "--task-file",
+        help="Path to a YAML file defining a custom task.",
     ),
     provider: Optional[str] = typer.Option(
         None,
@@ -51,11 +76,10 @@ def run(
     ),
 ) -> None:
     """Run the engineering workflow against a task."""
-    from agent.config import load_config, Provider
-    from tasks.task_runner import load_tasks
+    import os
+    from agent.config import load_config
 
     # Allow provider override via CLI flag
-    import os
     if provider:
         os.environ["DEFAULT_PROVIDER"] = provider
 
@@ -68,14 +92,8 @@ def run(
 
     _configure_logging(config.log_level)
 
-    tasks = load_tasks()
-    if not tasks:
-        console.print("[yellow]No tasks found in tasks/issues.yaml[/yellow]")
-        raise typer.Exit(code=1)
-
-    task = _select_task(tasks, task_id)
+    task = _resolve_task(task_id, repo, issue, difficulty, task_file)
     if task is None:
-        console.print(f"[red]Task '{task_id}' not found.[/red]")
         raise typer.Exit(code=1)
 
     console.print(f"\n[bold]Provider:[/bold]  {config.active_provider.value}")
@@ -104,8 +122,29 @@ def run(
             raise typer.Exit(code=1)
 
     output_path = record_result(result, results_dir=config.results_dir)
+
+    # Summary table
+    summary = Table(show_header=False, box=None, padding=(0, 2))
+    summary.add_column(style="dim")
+    summary.add_column(style="bold")
+
+    tokens_in = result.total_input_tokens
+    tokens_out = result.total_output_tokens
+    token_str = (
+        f"{tokens_in:,} in / {tokens_out:,} out"
+        if tokens_in is not None
+        else "n/a"
+    )
+
+    summary.add_row("Provider",   result.provider)
+    summary.add_row("Model",      result.model)
+    summary.add_row("Latency",    f"{result.total_elapsed_seconds}s")
+    summary.add_row("Tool calls", str(result.total_tool_calls) if result.total_tool_calls else "n/a")
+    summary.add_row("Tokens",     token_str)
+
+    console.print()
+    console.print(summary)
     console.print(f"\n[bold green]Done![/bold green] Results saved to: {output_path}")
-    console.print(f"Total time: {result.total_elapsed_seconds}s")
 
 
 # ---------------------------------------------------------------------------
@@ -189,10 +228,63 @@ def _configure_logging(level: str) -> None:
     )
 
 
-def _select_task(tasks: list[dict], task_id: Optional[str]) -> Optional[dict]:
-    if task_id is None:
-        return tasks[0]
-    return next((t for t in tasks if t.get("id") == task_id), None)
+def _resolve_task(
+    task_id: Optional[str],
+    repo: Optional[str],
+    issue: Optional[str],
+    difficulty: str,
+    task_file: Optional[Path],
+) -> Optional[dict]:
+    """
+    Resolve a task from one of three sources (mutually exclusive):
+      1. --task <id>         → built-in task from issues.yaml
+      2. --repo + --issue    → ad-hoc task constructed inline
+      3. --task-file <path>  → task loaded from a YAML file
+
+    Returns a task dict on success, None (after printing an error) on failure.
+    """
+    sources = sum([bool(task_id), bool(repo or issue), bool(task_file)])
+    if sources > 1:
+        console.print("[red]Error:[/red] only one of --task, --repo/--issue, or --task-file may be used at a time.")
+        return None
+
+    # --- Source 1: built-in task ---
+    if task_id or (not repo and not issue and not task_file):
+        from tasks.task_runner import load_tasks
+        tasks = load_tasks()
+        if not tasks:
+            console.print("[yellow]No tasks found in tasks/issues.yaml[/yellow]")
+            return None
+        if task_id is None:
+            return tasks[0]
+        task = next((t for t in tasks if t.get("id") == task_id), None)
+        if task is None:
+            console.print(f"[red]Task '{task_id}' not found in tasks/issues.yaml.[/red]")
+        return task
+
+    # --- Source 2: ad-hoc task ---
+    if repo or issue:
+        if not repo or not issue:
+            console.print("[red]Error:[/red] --repo and --issue must be used together.")
+            return None
+        return {
+            "id": "adhoc",
+            "title": issue[:72],
+            "description": issue,
+            "repo": repo,
+            "difficulty": difficulty,
+        }
+
+    # --- Source 3: task file ---
+    if task_file:
+        from tasks.task_runner import task_from_file
+        try:
+            return task_from_file(task_file)
+        except (FileNotFoundError, ValueError) as exc:
+            console.print(f"[red]Error:[/red] {exc}")
+            return None
+
+    return None  # unreachable
 
 
 if __name__ == "__main__":

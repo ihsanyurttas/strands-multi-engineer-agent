@@ -6,11 +6,11 @@
 #   bash scripts/bootstrap.sh --runtime compose # also check Docker
 #
 # Behaviour:
-#   - Creates a local .venv (never installs into the global Python environment)
+#   - Creates a local venv (never installs into the global Python environment)
 #   - Prefers uv if available, falls back to python -m venv + pip
 #   - Copies .env.example → .env if .env does not yet exist
 #   - Docker checks are only performed when --runtime compose is passed
-#   - CLI smoke test checks .venv/bin/agent directly, not just $PATH
+#   - CLI smoke test checks venv/bin/agent directly, not just $PATH
 
 set -euo pipefail
 
@@ -86,21 +86,26 @@ if [[ "$RUNTIME" == "compose" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 3. Create local virtual environment (.venv)
+# 3. Create local virtual environment (venv — no dot prefix)
+#
+# NOTE: We intentionally use "venv" (not ".venv") to avoid a Python 3.14
+# regression: macOS sets the UF_HIDDEN flag on files inside dotfile
+# directories, and Python 3.14 skips .pth files that carry that flag.
+# Using a non-dotfile directory sidesteps the issue entirely.
 # ---------------------------------------------------------------------------
-VENV_DIR="${ROOT_DIR}/.venv"
+VENV_DIR="${ROOT_DIR}/venv"
 
 if [[ -d "$VENV_DIR" ]]; then
-  echo "→  .venv already exists, skipping creation"
+  echo "→  venv already exists, skipping creation"
 else
   if command -v uv > /dev/null 2>&1; then
-    echo "→  Creating .venv with uv"
+    echo "→  Creating venv with uv"
     uv venv "$VENV_DIR" --python "$PYTHON_BIN"
   else
-    echo "→  Creating .venv with python -m venv"
+    echo "→  Creating venv with python -m venv"
     "$PYTHON_BIN" -m venv "$VENV_DIR"
   fi
-  echo "✓  .venv created at ${VENV_DIR}"
+  echo "✓  venv created at ${VENV_DIR}"
 fi
 
 # Resolve venv binaries regardless of activation state
@@ -108,13 +113,13 @@ VENV_PYTHON="${VENV_DIR}/bin/python"
 VENV_PIP="${VENV_DIR}/bin/pip"
 
 # ---------------------------------------------------------------------------
-# 4. Install dependencies into .venv
+# 4. Install dependencies into venv
 # ---------------------------------------------------------------------------
 if command -v uv > /dev/null 2>&1; then
-  echo "→  Installing dependencies with uv into .venv"
+  echo "→  Installing dependencies with uv into venv"
   uv pip install --python "$VENV_PYTHON" -e ".[dev]"
 else
-  echo "→  Installing dependencies with pip into .venv"
+  echo "→  Installing dependencies with pip into venv"
   "$VENV_PIP" install --upgrade pip --quiet
   "$VENV_PIP" install -e ".[dev]" --quiet
 fi
@@ -137,11 +142,15 @@ mkdir -p eval/results
 echo "✓  eval/results directory ready"
 
 # ---------------------------------------------------------------------------
-# 7. CLI smoke test — check .venv/bin/agent directly
+# 7. CLI smoke test — check venv/bin/agent directly
 # ---------------------------------------------------------------------------
 VENV_AGENT="${VENV_DIR}/bin/agent"
 if [[ -x "$VENV_AGENT" ]]; then
-  echo "✓  CLI entrypoint available at ${VENV_AGENT}"
+  if "$VENV_AGENT" --help > /dev/null 2>&1; then
+    echo "✓  CLI smoke test passed (${VENV_AGENT} --help)"
+  else
+    echo "⚠  CLI entrypoint exists but import failed — check install logs"
+  fi
 else
   echo "⚠  CLI entrypoint not found at ${VENV_AGENT}"
   echo "   Ensure the package installed correctly (check pyproject.toml [project.scripts])"
@@ -155,7 +164,7 @@ echo "────────────────────────�
 echo "  Bootstrap complete."
 echo ""
 echo "  Activate your environment:"
-echo "    source .venv/bin/activate"
+echo "    source venv/bin/activate"
 echo ""
 echo "  Next steps:"
 echo "    1. Edit .env with your API keys"

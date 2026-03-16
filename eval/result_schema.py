@@ -22,6 +22,7 @@ class PhaseResult(BaseModel):
     # Token counts extracted from the provider response, when available.
     input_tokens: int | None = None
     output_tokens: int | None = None
+    tool_calls: int | None = None
 
 
 class WorkflowResult(BaseModel):
@@ -40,9 +41,10 @@ class WorkflowResult(BaseModel):
     total_elapsed_seconds: float
     run_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-    # Token totals summed across all phases (None when provider does not expose usage).
+    # Totals summed across all phases.
     total_input_tokens: int | None = None
     total_output_tokens: int | None = None
+    total_tool_calls: int | None = None
     estimated_cost_usd: float | None = None
 
     # Confidence score (0–10) extracted from the self_review phase output.

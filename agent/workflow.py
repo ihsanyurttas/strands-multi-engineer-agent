@@ -152,9 +152,10 @@ def run_workflow(issue: str, repo_path: str, config: AgentConfig) -> WorkflowRes
 
     total_elapsed = time.perf_counter() - workflow_start
 
-    # Accumulate token counts from phases that reported them.
+    # Accumulate metrics from phases that reported them.
     total_input = sum(p.input_tokens or 0 for p in ctx.phase_results)
     total_output = sum(p.output_tokens or 0 for p in ctx.phase_results)
+    total_tools = sum(p.tool_calls or 0 for p in ctx.phase_results)
 
     return WorkflowResult(
         provider=ctx.provider,
@@ -165,6 +166,7 @@ def run_workflow(issue: str, repo_path: str, config: AgentConfig) -> WorkflowRes
         total_elapsed_seconds=round(total_elapsed, 3),
         total_input_tokens=total_input or None,
         total_output_tokens=total_output or None,
+        total_tool_calls=total_tools or None,
     )
 
 
@@ -198,12 +200,18 @@ def _run_phase(
     input_tokens: int | None = getattr(accumulated_usage, "inputTokens", None)
     output_tokens: int | None = getattr(accumulated_usage, "outputTokens", None)
 
+    # Tool call count: sum call_count across all tools used in this phase.
+    tool_metrics = getattr(metrics, "tool_metrics", {}) or {}
+    tool_calls: int | None = sum(
+        getattr(m, "call_count", 0) for m in tool_metrics.values()
+    ) or None
+
     output_text = str(result)
 
     logger.info(
-        "[%s] Phase '%s' done in %.2fs — %d chars, in=%s out=%s tokens",
+        "[%s] Phase '%s' done in %.2fs — %d chars, in=%s out=%s tokens, tools=%s",
         ctx.provider, phase_name, elapsed, len(output_text),
-        input_tokens, output_tokens,
+        input_tokens, output_tokens, tool_calls,
     )
 
     return output_text, PhaseResult(
@@ -213,4 +221,5 @@ def _run_phase(
         elapsed_seconds=round(elapsed, 3),
         input_tokens=input_tokens,
         output_tokens=output_tokens,
+        tool_calls=tool_calls,
     )
