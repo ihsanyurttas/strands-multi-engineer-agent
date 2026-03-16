@@ -1,0 +1,70 @@
+name: strands-multi-engineer-agent
+
+# ---------------------------------------------------------------------------
+# Services
+# ---------------------------------------------------------------------------
+services:
+
+  # --------------------------------------------------------------------------
+  # agent — the Python CLI application
+  # --------------------------------------------------------------------------
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      # Override Ollama URL to point at the compose service, not localhost
+      OLLAMA_BASE_URL: http://ollama:11434
+      AGENT_RUNTIME: docker
+    volumes:
+      # Mount results directory so output persists on the host
+      - ./eval/results:/app/eval/results
+      # Mount sample repos (read-only)
+      - ./sample_repos:/app/sample_repos:ro
+    depends_on:
+      ollama:
+        condition: service_healthy
+    profiles:
+      # Run agent separately: docker compose --profile run up agent
+      - run
+
+  # --------------------------------------------------------------------------
+  # ollama — local model server
+  # --------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    # GPU support — uncomment if NVIDIA runtime is available
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+# ---------------------------------------------------------------------------
+# Volumes
+# ---------------------------------------------------------------------------
+volumes:
+  ollama-models:
+    driver: local
+
+# ---------------------------------------------------------------------------
+# Notes
+# ---------------------------------------------------------------------------
+# Start Ollama only:          docker compose up ollama -d
+# Pull a model into Ollama:   docker compose exec ollama ollama pull llama3
+# Run agent (interactive):    docker compose run --rm agent agent run
+# Run agent with a profile:   docker compose --profile run up

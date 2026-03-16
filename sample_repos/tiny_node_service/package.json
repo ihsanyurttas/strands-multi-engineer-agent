@@ -1,0 +1,14 @@
+{
+  "name": "tiny-node-service",
+  "version": "0.1.0",
+  "description": "Minimal Node.js HTTP service used as an agent task target",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

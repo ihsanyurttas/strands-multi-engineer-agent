@@ -1,0 +1,54 @@
+# tasks/issues.yaml — sample engineering tasks for the agent workflow.
+#
+# Each task represents a real-world engineering issue that the agent will
+# inspect, plan, implement, and review.
+#
+# Fields:
+#   id          Unique identifier used with `agent run --task <id>`
+#   title       Short human-readable description
+#   description Full issue description passed to the agent as the problem statement
+#   repo        Path to the sample repository (relative to project root)
+#   difficulty  easy | medium | hard — for comparison/eval purposes
+#   tags        Optional list of topic tags
+
+tasks:
+
+  - id: fastapi-missing-validation
+    title: "Add input validation to FastAPI endpoint"
+    description: |
+      The POST /items endpoint in the tiny_fastapi_app accepts any payload
+      without validation. Add Pydantic model validation so that:
+      1. The 'name' field is required and must be a non-empty string
+      2. The 'price' field is required and must be a positive float
+      3. An appropriate 422 error is returned for invalid input
+      4. Add a unit test that covers both valid and invalid cases
+    repo: sample_repos/tiny_fastapi_app
+    difficulty: easy
+    tags: [python, fastapi, pydantic, validation]
+
+  - id: node-error-handling
+    title: "Add error handling to Node.js HTTP service"
+    description: |
+      The tiny_node_service has no error handling on its HTTP routes.
+      Add centralised error handling so that:
+      1. Unhandled route errors return a JSON error response (not a crash)
+      2. A 404 handler is added for unknown routes
+      3. The error response schema is: { "error": "<message>", "status": <code> }
+      4. Add a basic test using the built-in http module
+    repo: sample_repos/tiny_node_service
+    difficulty: easy
+    tags: [nodejs, javascript, error-handling]
+
+  - id: fastapi-add-auth
+    title: "Add API key authentication to FastAPI app"
+    description: |
+      Add simple API key authentication to the tiny_fastapi_app using
+      FastAPI's security utilities:
+      1. Read the expected API key from the API_KEY environment variable
+      2. Require an X-API-Key header on all non-health routes
+      3. Return 401 Unauthorized if the key is missing or incorrect
+      4. Keep the /health endpoint unauthenticated
+      5. Write tests for authenticated and unauthenticated requests
+    repo: sample_repos/tiny_fastapi_app
+    difficulty: medium
+    tags: [python, fastapi, security, authentication]
