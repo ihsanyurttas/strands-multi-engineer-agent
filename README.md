@@ -1,26 +1,37 @@
 # strands-multi-engineer-agent
 
-This project evaluates how different LLM providers behave when running the same engineering agent workflow.
+## Same workflow. Same task. Same tools. Different behavior.
 
-It allows direct comparison of:
-- **Patch quality** — how well does the generated change address the task?
-- **Tool usage behaviour** — how many tool calls, what patterns emerge per provider?
-- **Latency** — how long does each workflow phase take?
-- **Cost** — input/output token counts across providers
+Most LLM benchmarks measure models in isolation.
 
-The same task is executed across providers using identical prompts and tools.
+This shows what actually happens inside a real engineering agent workflow.
 
-Engineering agents behave very differently depending on the model provider.
-This project isolates the provider variable while keeping the workflow identical.
+The same task is executed across providers:
+Claude, GPT-4o, and Llama 3.2.
+
+Same inputs. Same system.
+
+Different behavior.
+
+- Some models are fast and decisive
+- Some overthink and self-review heavily
+- Some take 6x longer for the same outcome
+- Some fail silently with no output or clear signal
+
+That difference matters.
+
+In agent systems, reliability matters more than raw capability.
 
 Built on [AWS Strands](https://github.com/strands-agents/sdk-python). Swap the provider with one env var.
 
-> Built as a public proof-of-concept.
+---
 
-## What this project is (and is not)
+Not a production engineering agent.
 
-This repository is not a production engineering agent.
-It is a controlled experiment for comparing LLM behaviour in a fixed agent workflow.
+A controlled experiment:
+fixed workflow, fixed task, variable provider.
+
+The goal is behavioral comparison — not building the best agent.
 
 ---
 
